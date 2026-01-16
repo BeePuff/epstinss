@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Island Horror – Phase C</title>
+<style>
+body { margin:0; overflow:hidden; background:black; }
+#menu {
+  position:absolute; inset:0;
+  display:flex; justify-content:center; align-items:center;
+  flex-direction:column;
+  background:black; color:white;
+  font-family:Arial;
+  z-index:10;
+}
+button { padding:14px 30px; font-size:18px; }
+#hint {
+  position:fixed;
+  bottom:20px;
+  width:100%;
+  text-align:center;
+  color:#ddd;
+  font-family:Arial;
+}
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <h1>ISLAND DESCENT</h1>
+  <p>A beautiful place hides something dark</p>
+  <button onclick="start()">START</button>
+</div>
+
+<div id="hint">WASD move • Mouse look • F flashlight</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+let scene, camera, renderer;
+let player, flashlight;
+let keys = {};
+let yaw = 0, pitch = 0;
+let started = false;
+let pointerLocked = false;
+
+addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+addEventListener("mousemove", e => {
+  if (!pointerLocked) return;
+  yaw -= e.movementX * 0.002;
+  pitch -= e.movementY * 0.002;
+  pitch = Math.max(-1.2, Math.min(1.2, pitch));
+});
+
+addEventListener("click", () => {
+  if (!pointerLocked && renderer) renderer.domElement.requestPointerLock();
+});
+
+document.addEventListener("pointerlockchange", () => {
+  pointerLocked = document.pointerLockElement === renderer?.domElement;
+});
+
+function start() {
+  document.getElementById("menu").style.display = "none";
+  init();
+  started = true;
+}
+
+function init() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87ceeb); // sky blue
+
+  camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
+
+  renderer = new THREE.WebGLRenderer({ antialias:true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // 🌞 Bright daylight
+  const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+  sun.position.set(50, 100, 50);
+  scene.add(sun);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+  // 🔦 Flashlight (for cave)
+  flashlight = new THREE.SpotLight(0xffffff, 3, 30, Math.PI / 6, 0.4);
+  flashlight.visible = false;
+  scene.add(flashlight);
+  scene.add(flashlight.target);
+
+  // 🌊 Ocean
+  const ocean = new THREE.Mesh(
+    new THREE.PlaneGeometry(500, 500),
+    new THREE.MeshStandardMaterial({ color:0x1e90ff })
+  );
+  ocean.rotation.x = -Math.PI / 2;
+  ocean.position.y = -1;
+  scene.add(ocean);
+
+  // 🏝️ Island ground
+  const island = new THREE.Mesh(
+    new THREE.CircleGeometry(80, 64),
+    new THREE.MeshStandardMaterial({ color:0x3cb371 })
+  );
+  island.rotation.x = -Math.PI / 2;
+  scene.add(island);
+
+  // 🏖️ Sand ring
+  const sand = new THREE.Mesh(
+    new THREE.RingGeometry(65, 80, 64),
+    new THREE.MeshStandardMaterial({ color:0xedd9a3 })
+  );
+  sand.rotation.x = -Math.PI / 2;
+  sand.position.y = 0.01;
+  scene.add(sand);
+
+  // ⛰️ Hill with cave
+  const hill = new THREE.Mesh(
+    new THREE.SphereGeometry(25, 32, 32),
+    new THREE.MeshStandardMaterial({ color:0x2e8b57 })
+  );
+  hill.position.set(0, 10, -30);
+  scene.add(hill);
+
+  // 🕳️ Cave entrance
+  const cave = new THREE.Mesh(
+    new THREE.CylinderGeometry(6, 6, 12, 32),
+    new THREE.MeshStandardMaterial({ color:0x050505 })
+  );
+  cave.rotation.x = Math.PI / 2;
+  cave.position.set(0, 6, -45);
+  scene.add(cave);
+
+  // 🌴 Simple palm trees
+  for (let i = 0; i < 12; i++) {
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.5, 0.7, 6),
+      new THREE.MeshStandardMaterial({ color:0x8b5a2b })
+    );
+    trunk.position.set(
+      Math.random()*60-30,
+      3,
+      Math.random()*60-30
+    );
+    scene.add(trunk);
+
+    const leaves = new THREE.Mesh(
+      new THREE.SphereGeometry(3, 16, 16),
+      new THREE.MeshStandardMaterial({ color:0x228b22 })
+    );
+    leaves.position.y = 3.5;
+    trunk.add(leaves);
+  }
+
+  // Player
+  player = new THREE.Object3D();
+  player.position.set(0, 1.6, 30);
+  scene.add(player);
+
+  animate();
+}
+
+function update() {
+  if (!started) return;
+
+  const speed = 0.1;
+
+  const forward = new THREE.Vector3(
+    Math.sin(yaw), 0, Math.cos(yaw)
+  ).normalize();
+  const right = new THREE.Vector3(forward.z, 0, -forward.x);
+
+  if (keys.w) player.position.addScaledVector(forward, -speed);
+  if (keys.s) player.position.addScaledVector(forward, speed);
+  if (keys.a) player.position.addScaledVector(right, -speed);
+  if (keys.d) player.position.addScaledVector(right, speed);
+
+  if (keys.f) {
+    flashlight.visible = !flashlight.visible;
+    keys.f = false;
+  }
+
+  camera.position.copy(player.position);
+  camera.rotation.order = "YXZ";
+  camera.rotation.y = yaw;
+  camera.rotation.x = pitch;
+
+  flashlight.position.copy(camera.position);
+  flashlight.target.position.copy(
+    camera.position.clone().add(forward)
+  );
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  update();
+  renderer.render(scene, camera);
+}
+</script>
+
+</body>
+</html>
